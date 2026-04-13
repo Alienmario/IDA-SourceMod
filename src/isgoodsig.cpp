@@ -53,12 +53,12 @@ public:
 
 		int count = 0;
 
-		ea_t addr = bin_search2(0, endea, vec, BIN_SEARCH_FORWARD);
+		ea_t addr = bin_search(0, endea, vec, BIN_SEARCH_FORWARD);
 		while (addr != BADADDR)
 		{
 			addr += 1;
 			count += 1;
-			addr = bin_search2(addr, endea, vec, BIN_SEARCH_FORWARD);
+			addr = bin_search(addr, endea, vec, BIN_SEARCH_FORWARD);
 		}
 
 		switch (count)

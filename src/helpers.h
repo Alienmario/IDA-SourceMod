@@ -32,12 +32,12 @@ inline bool is_good_sig(std::string &sig)
 		return false;
 	}
 
-	addr = bin_search2(addr, funcs_segend, vec, BIN_SEARCH_FORWARD);
+	addr = bin_search(addr, funcs_segend, vec, BIN_SEARCH_FORWARD);
 	while (count < 2 && addr != BADADDR)
 	{
-		addr += 1; // bin_search2 is goofy
+		addr += 1;
 		count += 1;
-		addr = bin_search2(addr, funcs_segend, vec, BIN_SEARCH_FORWARD);
+		addr = bin_search(addr, funcs_segend, vec, BIN_SEARCH_FORWARD);
 	}
 	return count == 1;
 }

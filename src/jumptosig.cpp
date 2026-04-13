@@ -51,7 +51,7 @@ public:
 			return false;
 		}
 
-		ea_t addr = bin_search2(0, endea, vec, BIN_SEARCH_FORWARD);
+		ea_t addr = bin_search(0, endea, vec, BIN_SEARCH_FORWARD);
 		if (addr != BADADDR)
 		{
 			jumpto(addr, 0);
