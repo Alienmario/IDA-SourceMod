@@ -4,7 +4,6 @@ on:
   push:
     branches: [main, master]
   pull_request:
-    branches: [main, master]
   release:
     types: [created]
   workflow_dispatch:
@@ -21,7 +20,7 @@ jobs:
 
       - name: Clone IDA SDK
         run: |
-          git clone --recurse-submodules --depth 1 --branch v9.2 `
+          git clone --depth 1 --branch v9.2 `
             https://github.com/HexRaysSA/ida-sdk.git `
             ${{ github.workspace }}\ida-sdk
 
