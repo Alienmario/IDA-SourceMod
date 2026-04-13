@@ -39,6 +39,9 @@ if(NOT EXISTS "${IDASDK_LIB}")
     message(FATAL_ERROR "IDA import library not found: ${IDASDK_LIB}")
 endif()
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 add_library(idasourcemod SHARED
     src/plugin.cpp
     src/netpropimporter.cpp
