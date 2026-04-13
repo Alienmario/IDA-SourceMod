@@ -1,4 +1,3 @@
-#define BYTES_SOURCE
 #include <pro.h>
 #include <ida.hpp>
 #include <idp.hpp>
@@ -9,8 +8,6 @@
 #include <bytes.hpp>
 #include <fixup.hpp>
 #include <segment.hpp>
-#include <search.hpp>
-#include <struct.hpp>
 #include <typeinf.hpp>
 
 #include "scriptmgr.h"
@@ -166,7 +163,7 @@ public:
 		return flags;
 	}
 
-	flags_t GetSizeData(asize_t &bc)
+	tinfo_t GetMemberType(asize_t &bc)
 	{
 		switch (GetType())
 		{
@@ -176,7 +173,7 @@ public:
 			if (GetName().rfind("m_fl", 0) == 0)
 			{
 				bc = 4;
-				return FF_FLOAT;
+				return tinfo_t(BTF_FLOAT);
 			}
 
 			int highbyte = static_cast<int>(ceil(GetNumBits() / 8.0));
@@ -186,33 +183,38 @@ public:
 			case 0:
 			case 1:
 				bc = 1;
-				return FF_BYTE;
+				return tinfo_t(BTF_UINT8);
 			case 2:
 				bc = 2;
-				return FF_WORD;
+				return tinfo_t(BTF_UINT16);
 			case 4:
 				bc = 4;
-				return FF_DWORD;
+				return tinfo_t(BTF_UINT32);
 			default:
 				bc = 1;
-				return FF_BYTE;
+				return tinfo_t(BTF_UINT8);
 			}
 		}
 		case DPT_Float:
 			bc = 4;
-			return FF_FLOAT;
+			return tinfo_t(BTF_FLOAT);
 		case DPT_Vector:
 			bc = 12;
-			return FF_FLOAT;
+			return g_Vector;
 		case DPT_VectorXY:
+		{
 			bc = 8;
-			return FF_FLOAT;
+			tinfo_t ft(BTF_FLOAT);
+			tinfo_t arr;
+			arr.create_array(ft, 2);
+			return arr;
+		}
 		case DPT_String:
 			bc = 4;
-			return FF_DWORD;
+			return tinfo_t(BTF_UINT32);
 		default:
 			bc = 1;
-			return FF_BYTE;
+			return tinfo_t(BTF_UINT8);
 		}
 	}
 
@@ -335,16 +337,18 @@ public:
 			OwnerProp()->SetPredefinedSize(arraysize);
 	}
 
-	void AddToStruct(struc_t *struc)
+	void AddToStruct(tinfo_t &tinfo)
 	{
-		if (OwnerProp() != nullptr && OwnerProp()->GetPredefinedSize() != BADADDR && Props().size() > 0 && OwnerProp()->GetOffset() > 0)
+		if (OwnerProp() != nullptr && OwnerProp()->GetPredefinedSize() > 0 && Props().size() > 0 && OwnerProp()->GetOffset() > 0)
 		{
 			std::string &fieldname = GetName();
 			ea_t offset = OwnerProp()->GetOffset();
-			asize_t size;
-			flags_t flags = OwnerProp()->GetSizeData(size);
+			asize_t elemsize;
+			tinfo_t elemtype = OwnerProp()->GetMemberType(elemsize);
 			asize_t predefsize = OwnerProp()->GetPredefinedSize();
-			add_struc_member(struc, fieldname.c_str(), offset, flags, nullptr, size * predefsize);
+			tinfo_t arrtype;
+			arrtype.create_array(elemtype, (uint32)predefsize);
+			tinfo.add_udm(fieldname.c_str(), arrtype, offset * 8);
 		}
 
 		for (auto &val : Props())
@@ -359,11 +363,9 @@ public:
 
 //			msg("%s %lu\n", prop->GetName().c_str(), prop->GetOffset());
 			ea_t offset = prop->GetOffset();
-			asize_t size;
-			flags_t flags = prop->GetSizeData(size);
-			add_struc_member(struc, fieldname.c_str(), offset, flags, nullptr, size);
-			if (prop->GetType() == DPT_Vector)
-				set_member_tinfo(struc, get_member(struc, offset), 0, g_Vector, 0);
+			asize_t elemsize;
+			tinfo_t membertype = prop->GetMemberType(elemsize);
+			tinfo.add_udm(fieldname.c_str(), membertype, offset * 8);
 		}
 	}
 
@@ -412,15 +414,15 @@ public:
 	ServerClass(std::string name)
 		: m_Name(name), m_Skip(false)
 	{
-		m_StrucID = get_struc_id(name.c_str());
-		if (m_StrucID == BADADDR)
-		{
-			m_StrucID = add_struc(BADADDR, name.c_str());
-		}
-		else
+		if (m_Tinfo.get_named_type(nullptr, name.c_str()))
 		{
 			// Already exists. Someone ran the script again?
 			m_Skip = true;
+		}
+		else
+		{
+			m_Tinfo.create_udt();
+			m_Tinfo.set_named_type(nullptr, name.c_str());
 		}
 	}
 
@@ -439,11 +441,10 @@ public:
 
 	virtual void MakeStruct(void)
 	{
-		struc_t *struc = GetStruct();
 //		msg("Adding %s\n", GetName());
 		for (auto &val : Tables())
 		{
-			val.second->AddToStruct(struc);
+			val.second->AddToStruct(m_Tinfo);
 		}
 	}
 
@@ -479,14 +480,6 @@ public:
 			m_Tables[name] = table;
 	}
 
-	inline tid_t GetStrucID(void)
-	{
-		return m_StrucID;
-	}
-	inline struc_t *GetStruct(void)
-	{
-		return get_struc(GetStrucID());
-	}
 	inline std::map<std::string, std::shared_ptr<SendProp>> &Props(void)
 	{
 		return m_Props;
@@ -500,7 +493,7 @@ private:
 	std::string m_Name;
 	std::map<std::string, std::shared_ptr<SendProp>> m_Props;
 	std::map<std::string, std::shared_ptr<SendTable>> m_Tables;
-	tid_t m_StrucID;
+	tinfo_t m_Tinfo;
 	bool m_Skip; // This struct already exists, this is most likely a reparse
 };
 
@@ -530,28 +523,24 @@ public:
 
 	void MakeBasicStructs(void)
 	{
-		tid_t strucid = get_struc_id("Vector");
-		if (strucid == BADADDR)
+		auto make_vec_struct = [](const char *name)
 		{
-			strucid = add_struc(BADADDR, "Vector");
-			struc_t *vector = get_struc(strucid);
-			add_struc_member(vector, "x", BADADDR, FF_FLOAT, nullptr, sizeof(float));
-			add_struc_member(vector, "y", BADADDR, FF_FLOAT, nullptr, sizeof(float));
-			add_struc_member(vector, "z", BADADDR, FF_FLOAT, nullptr, sizeof(float));
-		}
+			tinfo_t t;
+			if (!t.get_named_type(nullptr, name))
+			{
+				t.create_udt();
+				t.add_udm("x", tinfo_t(BTF_FLOAT), 0);
+				t.add_udm("y", tinfo_t(BTF_FLOAT), 32);
+				t.add_udm("z", tinfo_t(BTF_FLOAT), 64);
+				t.set_named_type(nullptr, name);
+			}
+		};
+
+		make_vec_struct("Vector");
+		make_vec_struct("QAngle");
 
 		qstring out;
 		parse_decl(&g_Vector, &out, nullptr, "Vector;", 0);
-
-		strucid = get_struc_id("QAngle");
-		if (strucid == BADADDR)
-		{
-			strucid = add_struc(BADADDR, "QAngle");
-			struc_t *vector = get_struc(strucid);
-			add_struc_member(vector, "x", BADADDR, FF_FLOAT, nullptr, sizeof(float));
-			add_struc_member(vector, "y", BADADDR, FF_FLOAT, nullptr, sizeof(float));
-			add_struc_member(vector, "z", BADADDR, FF_FLOAT, nullptr, sizeof(float));
-		}
 	}
 
 	inline std::shared_ptr<ServerClass> GetClass(std::string &name)
